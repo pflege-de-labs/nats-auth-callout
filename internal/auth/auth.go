@@ -11,11 +11,28 @@ import (
 
 type Service struct {
 	issuerKeyPair nkeys.KeyPair
-	handler       NatsAuthHandler
-	audience      string
+	handler       Handler
+	aud           string
 }
 
-type NatsAuthHandler func(req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, error)
+type Handler interface {
+	Handle(*jwt.AuthorizationRequestClaims) (*jwt.UserClaims, error)
+}
+
+func NewService(issuerSeed []byte, verifier Handler) (*Service, error) {
+	kp, err := nkeys.FromSeed([]byte(issuerSeed))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	s := Service{
+		issuerKeyPair: kp,
+		handler:       verifier,
+		aud:           "APP", //Should be configurable
+	}
+
+	return &s, nil
+}
 
 func (a *Service) Handle(r micro.Request) {
 	rc, err := jwt.DecodeAuthorizationRequestClaims(string(r.Data()))
@@ -27,9 +44,9 @@ func (a *Service) Handle(r micro.Request) {
 	userNkey := rc.UserNkey
 	serverId := rc.Server.ID
 	claims := jwt.NewUserClaims(rc.UserNkey)
-	claims.Audience = a.audience
+	claims.Audience = a.aud
 
-	claims, err = a.handler(rc)
+	claims, err = a.handler.Handle(rc)
 	if err != nil {
 		a.Respond(r, userNkey, serverId, "", err)
 		return
