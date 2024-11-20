@@ -6,7 +6,12 @@ FROM mcr.microsoft.com/devcontainers/go:dev-1.23
 
 # [Optional] Uncomment the next lines to use go get to install anything else you need
 USER vscode
-RUN go install github.com/nats-io/natscli/nats@latest
+RUN go install github.com/nats-io/natscli/nats@latest \
+    && curl -LO https://raw.githubusercontent.com/nats-io/nsc/main/install.sh \
+    && sh ./install.sh \
+    && echo 'export PATH="${PATH}:/home/vscode/.nsccli/bin"' >> ~/.bashrc \
+    && echo 'path+=("/home/vscode/.nsccli/bin")' >> ~/.zshrc
+
 USER root
 
 # [Optional] Uncomment this line to install global node packages.
