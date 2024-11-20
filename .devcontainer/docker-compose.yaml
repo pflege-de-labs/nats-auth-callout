@@ -1,0 +1,47 @@
+name: "nats-oidc-auth"
+
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+        - .env
+
+    volumes:
+      - ../..:/workspaces:cached
+      - ./config:/home/vscode/.config
+      - ./nkey:/etc/nkey
+
+    command: sleep infinity
+    networks:
+      - nats
+
+  nats:
+    image: nats:2
+    volumes:
+      - js-data:/nats
+      - ./nats:/conf
+    # env_file:
+    #   - .env
+    networks:
+      - nats
+    command: [ "-c",  "/conf/nats.conf"]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.5
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+    command: [ "start-dev" ]
+    # env_file:
+    #   # Ensure that the variables in .env match the same variables in devcontainer.json
+    #   - .env
+    networks:
+      - nats
+
+volumes:
+  js-data:
+
+networks:
+  nats:
