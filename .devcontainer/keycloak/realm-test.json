@@ -1,0 +1,88 @@
+{
+  "realm": "test",
+  "enabled": true,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "client": {
+      "nats": [
+        { "name": "events-read", "description": "Read events.> and EVENTS stream info" },
+        { "name": "orders-publish", "description": "Publish orders.>" }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "nats",
+      "name": "NATS (users, CLI, browser)",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:*"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "oauth2.device.authorization.grant.enabled": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "nats-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "nats",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "svc-orders",
+      "name": "Example backend service",
+      "publicClient": false,
+      "secret": "example-secret-do-not-use",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "nats-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "nats",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Example",
+      "credentials": [{ "type": "password", "value": "alice", "temporary": false }],
+      "clientRoles": { "nats": ["events-read"] }
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@example.com",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Example",
+      "credentials": [{ "type": "password", "value": "bob", "temporary": false }]
+    },
+    {
+      "username": "service-account-svc-orders",
+      "enabled": true,
+      "serviceAccountClientId": "svc-orders",
+      "clientRoles": { "nats": ["orders-publish"] }
+    }
+  ]
+}
