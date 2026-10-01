@@ -1,0 +1,17 @@
+# Role mapping for the example realm in ../keycloak/realm-test.json.
+issuers:
+  - url: http://keycloak:8080/realms/test
+    audience: nats
+    roleClient: nats
+
+defaultAccount: $G
+
+roles:
+  events-read:
+    sub:
+      allow: ["events.>", "_INBOX.>"]
+    pub:
+      allow: ["$JS.API.INFO", "$JS.API.STREAM.INFO.EVENTS"]
+  orders-publish:
+    pub:
+      allow: ["orders.>"]
