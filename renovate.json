@@ -1,0 +1,34 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    ":semanticCommits"
+  ],
+  "postUpdateOptions": ["gomodTidy"],
+  "packageRules": [
+    {
+      "description": "Keep the e2e/devcontainer NATS image on the cc-gitops production version",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["nats"],
+      "enabled": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Go tools run via go run in workflows",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s*- run: go run \\S+@(?<currentValue>v[^\\s]+)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Container images referenced in e2e tests",
+      "managerFilePatterns": ["/^e2e/.+\\.go$/"],
+      "matchStrings": ["\"(?<depName>[a-z0-9.\\-/]+):(?<currentValue>[0-9][^\"]*)\""],
+      "datasourceTemplate": "docker"
+    }
+  ]
+}

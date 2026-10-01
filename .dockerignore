@@ -1,0 +1,6 @@
+.git
+.github
+.devcontainer
+e2e
+*.md
+coverage.out
