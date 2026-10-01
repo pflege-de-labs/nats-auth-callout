@@ -3,155 +3,153 @@ package auth
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/nats-io/jwt/v2"
-	"github.com/rs/zerolog/log"
+	"github.com/pflege-de-labs/nats-auth-callout/internal/config"
 )
 
+// ErrNoToken is returned when the client connected without a token.
+var ErrNoToken = errors.New("no token in connect options")
+
+// OIDC authorizes NATS connections carrying an OIDC access token.
 type OIDC struct {
-	v *oidc.IDTokenVerifier
+	issuers map[string]*issuer
+	mapper  *Mapper
 }
 
-func NewOIDC(providerURL, clientID string) (*OIDC, error) {
-	p, err := oidc.NewProvider(context.Background(), providerURL)
+type issuer struct {
+	cfg config.Issuer
+
+	mu       sync.Mutex
+	verifier *oidc.IDTokenVerifier
+}
+
+// tokenClaims are the Keycloak claims used for mapping.
+type tokenClaims struct {
+	PreferredUsername string `json:"preferred_username"`
+	RealmAccess       struct {
+		Roles []string `json:"roles"`
+	} `json:"realm_access"`
+	ResourceAccess map[string]struct {
+		Roles []string `json:"roles"`
+	} `json:"resource_access"`
+}
+
+// NewOIDC creates an authorizer; issuer discovery happens lazily on first use or Ready.
+func NewOIDC(cfg *config.Config) *OIDC {
+	o := &OIDC{issuers: map[string]*issuer{}, mapper: NewMapper(cfg)}
+	for _, is := range cfg.Issuers {
+		o.issuers[is.URL] = &issuer{cfg: is}
+	}
+	return o
+}
+
+// Ready succeeds once discovery for every issuer has been loaded.
+func (o *OIDC) Ready(ctx context.Context) error {
+	var errs []error
+	for _, is := range o.issuers {
+		if _, err := is.get(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (i *issuer) get(ctx context.Context) (*oidc.IDTokenVerifier, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.verifier != nil {
+		return i.verifier, nil
+	}
+
+	discovery := i.cfg.URL
+	if i.cfg.DiscoveryURL != "" {
+		discovery = i.cfg.DiscoveryURL
+		ctx = oidc.InsecureIssuerURLContext(ctx, i.cfg.URL)
+	}
+	// Provider keeps ctx for later JWKS fetches, so it must not be request scoped.
+	p, err := oidc.NewProvider(context.WithoutCancel(ctx), discovery)
+	if err != nil {
+		return nil, fmt.Errorf("discover issuer %s: %w", i.cfg.URL, err)
+	}
+	i.verifier = p.Verifier(&oidc.Config{ClientID: i.cfg.Audience})
+	return i.verifier, nil
+}
+
+// Authorize verifies the connect token and builds the NATS user claims.
+func (o *OIDC) Authorize(ctx context.Context, req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, error) {
+	token := req.ConnectOptions.Token
+	if token == "" {
+		return nil, ErrNoToken
+	}
+
+	iss, err := unverifiedIssuer(token)
+	if err != nil {
+		return nil, err
+	}
+	is, ok := o.issuers[iss]
+	if !ok {
+		return nil, fmt.Errorf("untrusted issuer %q", iss)
+	}
+	v, err := is.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	idt, err := v.Verify(ctx, token)
+	if err != nil {
+		return nil, fmt.Errorf("verify token: %w", err)
+	}
+	var tc tokenClaims
+	if err := idt.Claims(&tc); err != nil {
+		return nil, fmt.Errorf("decode token claims: %w", err)
+	}
+
+	account, perms, err := o.mapper.Resolve(tc.roles(is.cfg.RoleClient))
 	if err != nil {
 		return nil, err
 	}
 
-	verifier := p.Verifier(&oidc.Config{ClientID: clientID})
-	oidcAuth := OIDC{
-		v: verifier,
+	uc := jwt.NewUserClaims(req.UserNkey)
+	uc.Audience = account
+	uc.Name = tc.PreferredUsername
+	if uc.Name == "" {
+		uc.Name = idt.Subject
 	}
-
-	return &oidcAuth, nil
+	// NATS disconnects the client once the token expires.
+	uc.Expires = idt.Expiry.Unix()
+	uc.Permissions = perms
+	return uc, nil
 }
 
-type Claims struct {
-	Name          string `json:"name"`
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
+func (c tokenClaims) roles(client string) []string {
+	roles := append([]string{}, c.RealmAccess.Roles...)
+	if client != "" {
+		roles = append(roles, c.ResourceAccess[client].Roles...)
+	}
+	return roles
 }
 
-func (v *OIDC) VerifyJWT(token string) (*Claims, error) {
-	claims := &Claims{}
-
-	idToken, err := v.v.Verify(context.Background(), token)
+// unverifiedIssuer reads "iss" to pick the verifier; the signature is checked afterwards.
+func unverifiedIssuer(token string) (string, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", errors.New("token is not a JWT")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("decode token payload: %w", err)
 	}
-
-	if err := idToken.Claims(claims); err != nil {
-		return nil, err
+	var c struct {
+		Issuer string `json:"iss"`
 	}
-
-	return claims, nil
+	if err := json.Unmarshal(payload, &c); err != nil {
+		return "", fmt.Errorf("parse token payload: %w", err)
+	}
+	return c.Issuer, nil
 }
-
-func (v *OIDC) Handle(req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, error) {
-	claims := jwt.NewUserClaims(req.UserNkey)
-	log.Debug().
-		Str("nkey", req.UserNkey).
-		Str("aud", req.Audience).
-		Str("type", string(req.Type)).
-		Msg("AuthReqClaim")
-
-	claims.Audience = "APP"
-
-	oidcClaims, err := v.VerifyJWT(req.ConnectOptions.Token)
-	if err != nil {
-		return nil, err
-	}
-
-	userId := base64.StdEncoding.EncodeToString([]byte(oidcClaims.Email))
-
-	// Where should these permissions be defined? Keycloak, OPA?
-
-	claims.Name = userId
-	claims.Permissions = jwt.Permissions{
-		Pub: jwt.Permission{
-			Allow: jwt.StringList{
-				"$JS.API.INFO",                // General JS Info
-				"$JS.API.STREAM.INFO.>",       // Getting info on any stream
-				"$JS.API.CONSUMER.CREATE.>",   // Creating consumers on any stream
-				"$JS.API.CONSUMER.MSG.NEXT.>", // Creating consumers on any stream
-			},
-		},
-	}
-
-	return claims, nil
-}
-
-// var DefaultScopes = []string{oidc.ScopeOpenID, "profile", "email"}
-
-//func randString(nByte int) (string, error) {
-// 	b := make([]byte, nByte)
-// 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-// 		return "", err
-// 	}
-// 	return base64.RawURLEncoding.EncodeToString(b), nil
-// }
-
-// func setCallbackCookie(w http.ResponseWriter, r *http.Request, name, value string) {
-// 	c := &http.Cookie{
-// 		Name:     name,
-// 		Value:    value,
-// 		MaxAge:   int(time.Hour.Seconds()),
-// 		Secure:   r.TLS != nil,
-// 		HttpOnly: true,
-// 	}
-// 	http.SetCookie(w, c)
-// }
-
-// func (o *OIDC) HandleAuthRequest(req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, error) {
-// 	_ = req
-// 	return nil, fmt.Errorf("not implemented")
-// }
-
-// func (o *OIDC) handleRedirect(w http.ResponseWriter, r *http.Request) {
-// 	state, err := randString(16)
-// 	if err != nil {
-// 		http.Error(w, "Internal error", http.StatusInternalServerError)
-// 		return
-// 	}
-// 	nonce, err := randString(16)
-// 	if err != nil {
-// 		http.Error(w, "Internal error", http.StatusInternalServerError)
-// 		return
-// 	}
-// 	setCallbackCookie(w, r, "state", state)
-// 	setCallbackCookie(w, r, "nonce", nonce)
-// 	http.Redirect(w, r, o.cfg.AuthCodeURL(state, oidc.Nonce(nonce)), http.StatusFound)
-// }
-
-// func (o *OIDC) handleOAuth2Callback(w http.ResponseWriter, r *http.Request) {
-// 	// Verify state and errors.
-// 	ctx := r.Context()
-// 	oauth2Token, err := o.cfg.Exchange(ctx, r.URL.Query().Get("code"))
-// 	if err != nil {
-// 		// handle error
-// 	}
-
-// 	// Extract the ID Token from OAuth2 token.
-// 	rawIDToken, ok := oauth2Token.Extra("id_token").(string)
-// 	if !ok {
-// 		// handle missing token
-// 	}
-
-// 	verifier := o.p.VerifierContext(&oidc.Config{ClientID: o.cfg.ClientID})
-
-// 	// Parse and verify ID Token payload.
-// 	idToken, err := verifier.Verify(ctx, rawIDToken)
-// 	if err != nil {
-// 		// handle error
-// 	}
-
-// 	// Extract custom claims
-// 	var claims struct {
-// 		Email    string `json:"email"`
-// 		Verified bool   `json:"email_verified"`
-// 	}
-// 	if err := idToken.Claims(&claims); err != nil {
-// 		// handle error
-// 	}
-// }
