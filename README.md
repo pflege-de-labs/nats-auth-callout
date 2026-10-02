@@ -73,7 +73,9 @@ export DOCKER_HOST=unix://$(podman machine inspect --format '{{.ConnectionInfo.P
 export TESTCONTAINERS_RYUK_DISABLED=true
 ```
 
-`NATS_IMAGE` overrides the nats-server image used by the e2e tests (default: production version).
+The e2e suite runs two deployments: `global` (production/staging style, static users in `$G`) and
+`management` (named accounts, MQTT, [testdata](e2e/testdata)). `NATS_IMAGE` and
+`NATS_MANAGEMENT_IMAGE` override their nats-server images (defaults: the cc-gitops versions).
 
 ### e2e findings
 
@@ -84,3 +86,10 @@ Verified against nats-server 2.12.6 and 2.14.7 in config mode:
 - Callout users can be placed in `$G`. They exchange messages with static users and see the
   streams of the global account.
 - `$SYS` users are sent to the callout unless they are listed in `auth_users`.
+
+Management style (named accounts, nats-server 2.14.0):
+
+- `no_auth_user` in a named account (`mqtt` in `MQTT`) keeps working when listed in `auth_users`.
+- `auth_callout.account` can be a dedicated account (`AUTH`); token users land in `AUDIT` or `MQTT` per role.
+- MQTT clients authenticate with the access token as MQTT password (any username not in `auth_users`).
+- MQTT `topic/#` also subscribes to the parent subject, so roles need both `topic` and `topic.>`.

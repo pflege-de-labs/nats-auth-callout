@@ -5,8 +5,22 @@
   "roles": {
     "client": {
       "nats": [
-        { "name": "events-read", "description": "Read events.> and EVENTS stream info" },
-        { "name": "orders-publish", "description": "Publish orders.>" }
+        {
+          "name": "events-read",
+          "description": "Read events.> and EVENTS stream info"
+        },
+        {
+          "name": "orders-publish",
+          "description": "Publish orders.>"
+        },
+        {
+          "name": "nats-audit-read",
+          "description": "Management: read AUDIT streams"
+        },
+        {
+          "name": "nats-mqtt",
+          "description": "Management: MQTT topics de/pflege/mqtt/#"
+        }
       ]
     }
   },
@@ -17,8 +31,12 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
-      "redirectUris": ["http://localhost:*"],
-      "webOrigins": ["+"],
+      "redirectUris": [
+        "http://localhost:*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "oauth2.device.authorization.grant.enabled": "true"
@@ -66,8 +84,18 @@
       "emailVerified": true,
       "firstName": "Alice",
       "lastName": "Example",
-      "credentials": [{ "type": "password", "value": "alice", "temporary": false }],
-      "clientRoles": { "nats": ["events-read"] }
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "nats": [
+          "events-read"
+        ]
+      }
     },
     {
       "username": "bob",
@@ -76,13 +104,63 @@
       "emailVerified": true,
       "firstName": "Bob",
       "lastName": "Example",
-      "credentials": [{ "type": "password", "value": "bob", "temporary": false }]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob",
+          "temporary": false
+        }
+      ]
     },
     {
       "username": "service-account-svc-orders",
       "enabled": true,
       "serviceAccountClientId": "svc-orders",
-      "clientRoles": { "nats": ["orders-publish"] }
+      "clientRoles": {
+        "nats": [
+          "orders-publish"
+        ]
+      }
+    },
+    {
+      "username": "carol",
+      "enabled": true,
+      "email": "carol@example.com",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "Example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "carol",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "nats": [
+          "nats-audit-read"
+        ]
+      }
+    },
+    {
+      "username": "dave",
+      "enabled": true,
+      "email": "dave@example.com",
+      "emailVerified": true,
+      "firstName": "Dave",
+      "lastName": "Example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dave",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "nats": [
+          "nats-mqtt"
+        ]
+      }
     }
   ]
 }
