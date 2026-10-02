@@ -9,15 +9,17 @@ roles:
     account: AUDIT
     sub:
       allow: ["AUDIT.>", "_INBOX.>"]
+    # Read-only JetStream: no stream/consumer delete, no durable consumers.
     pub:
       allow:
         - "$JS.API.INFO"
-        - "$JS.API.STREAM.INFO.AUDIT"
-        - "$JS.API.CONSUMER.CREATE.AUDIT.>"
-        - "$JS.API.CONSUMER.DELETE.AUDIT.>"
-        - "$JS.API.CONSUMER.INFO.AUDIT.>"
-        - "$JS.API.CONSUMER.MSG.NEXT.AUDIT.>"
-        - "$JS.ACK.AUDIT.>"
+        - "$JS.API.STREAM.NAMES"
+        - "$JS.API.STREAM.LIST"
+        - "$JS.API.STREAM.INFO.*"
+        - "$JS.API.CONSUMER.CREATE.*.>"
+        - "$JS.API.CONSUMER.INFO.*.>"
+        - "$JS.API.CONSUMER.MSG.NEXT.*.>"
+        - "$JS.ACK.*.>"
   nats-mqtt:
     account: MQTT
     # MQTT "de/pflege/mqtt/#" also matches the parent topic, so allow it explicitly.

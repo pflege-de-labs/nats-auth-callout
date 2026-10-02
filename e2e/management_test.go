@@ -74,6 +74,14 @@ func TestManagementAuditReader(t *testing.T) {
 		assert.Equal(t, []string{"alice logged in"}, got)
 	})
 
+	t.Run("cannot delete streams", func(t *testing.T) {
+		js, err := jetstream.New(carol)
+		require.NoError(t, err)
+		assert.Error(t, js.DeleteStream(ctx, "AUDIT"))
+		_, err = ajs.Stream(ctx, "AUDIT")
+		assert.NoError(t, err, "stream must still exist")
+	})
+
 	t.Run("cannot write audit events", func(t *testing.T) {
 		require.NoError(t, carol.Publish("AUDIT.fake", []byte("x")))
 		select {
