@@ -1,0 +1,27 @@
+# Mirrors the cc-gitops management role mapping.
+issuers:
+  - url: http://placeholder/realms/test # replaced by the test
+    audience: nats
+    roleClient: nats
+
+roles:
+  nats-audit-read:
+    account: AUDIT
+    sub:
+      allow: ["AUDIT.>", "_INBOX.>"]
+    pub:
+      allow:
+        - "$JS.API.INFO"
+        - "$JS.API.STREAM.INFO.AUDIT"
+        - "$JS.API.CONSUMER.CREATE.AUDIT.>"
+        - "$JS.API.CONSUMER.DELETE.AUDIT.>"
+        - "$JS.API.CONSUMER.INFO.AUDIT.>"
+        - "$JS.API.CONSUMER.MSG.NEXT.AUDIT.>"
+        - "$JS.ACK.AUDIT.>"
+  nats-mqtt:
+    account: MQTT
+    # MQTT "de/pflege/mqtt/#" also matches the parent topic, so allow it explicitly.
+    pub:
+      allow: ["de.pflege.mqtt", "de.pflege.mqtt.>"]
+    sub:
+      allow: ["de.pflege.mqtt", "de.pflege.mqtt.>"]
