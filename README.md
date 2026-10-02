@@ -87,7 +87,7 @@ Verified against nats-server 2.12.6 and 2.14.7 in config mode:
   streams of the global account.
 - `$SYS` users are sent to the callout unless they are listed in `auth_users`.
 
-Management style (named accounts, nats-server 2.14.0):
+NATS with named accounts, nats-server 2.14.0:
 
 - `no_auth_user` in a named account (`mqtt` in `MQTT`) keeps working when listed in `auth_users`.
 - `auth_callout.account` can be a dedicated account (`AUTH`); token users land in `AUDIT` or `MQTT` per role.
