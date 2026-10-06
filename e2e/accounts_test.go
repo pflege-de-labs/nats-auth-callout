@@ -14,22 +14,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestManagementNoAuthUserStaysInMQTTAccount(t *testing.T) {
-	calls := management.calloutDelta(t, func() {
-		_, err := management.connect(t, nats.Name("anonymous"))
+func TestAccountsNoAuthUserStaysInMQTTAccount(t *testing.T) {
+	calls := accounts.calloutDelta(t, func() {
+		_, err := accounts.connect(t, nats.Name("anonymous"))
 		require.NoError(t, err)
 	})
 	assert.Zero(t, calls, "anonymous connection must not hit the callout")
-	ci := management.connz(t, "anonymous")
+	ci := accounts.connz(t, "anonymous")
 	assert.Equal(t, "mqtt", ci.User)
 	assert.Equal(t, "MQTT", ci.Account)
 }
 
-func TestManagementStaticUsersBypassCallout(t *testing.T) {
+func TestAccountsStaticUsersBypassCallout(t *testing.T) {
 	for _, user := range []string{"mqtt", "audit", "sys"} {
 		t.Run(user, func(t *testing.T) {
-			calls := management.calloutDelta(t, func() {
-				_, err := management.connect(t, nats.UserInfo(user, user))
+			calls := accounts.calloutDelta(t, func() {
+				_, err := accounts.connect(t, nats.UserInfo(user, user))
 				require.NoError(t, err)
 			})
 			assert.Zero(t, calls)
@@ -37,9 +37,9 @@ func TestManagementStaticUsersBypassCallout(t *testing.T) {
 	}
 }
 
-func TestManagementAuditReader(t *testing.T) {
+func TestAccountsAuditReader(t *testing.T) {
 	ctx := context.Background()
-	audit, err := management.connect(t, nats.UserInfo("audit", "audit"))
+	audit, err := accounts.connect(t, nats.UserInfo("audit", "audit"))
 	require.NoError(t, err)
 	ajs, err := jetstream.New(audit)
 	require.NoError(t, err)
@@ -49,13 +49,13 @@ func TestManagementAuditReader(t *testing.T) {
 	require.NoError(t, err)
 
 	asyncErr := make(chan error, 1)
-	carol, err := management.connect(t,
+	carol, err := accounts.connect(t,
 		nats.Name("carol"),
 		nats.Token(passwordToken(t, "carol", "carol")),
 		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) { asyncErr <- err }),
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "AUDIT", management.connz(t, "carol").Account)
+	assert.Equal(t, "AUDIT", accounts.connz(t, "carol").Account)
 
 	t.Run("reads the AUDIT stream", func(t *testing.T) {
 		js, err := jetstream.New(carol)
@@ -96,7 +96,7 @@ func TestManagementAuditReader(t *testing.T) {
 func mqttClient(t *testing.T, password string) (mqtt.Client, error) {
 	t.Helper()
 	opts := mqtt.NewClientOptions().
-		AddBroker(management.mqttURL).
+		AddBroker(accounts.mqttURL).
 		SetClientID("e2e-" + t.Name()).
 		// Any username not listed in auth_users; the password carries the token.
 		SetUsername("token").
@@ -120,36 +120,36 @@ func mqttWait(t *testing.T, tok mqtt.Token) {
 	require.NoError(t, tok.Error())
 }
 
-func TestManagementMQTTWithToken(t *testing.T) {
-	static, err := management.connect(t, nats.UserInfo("mqtt", "mqtt"))
+func TestAccountsMQTTWithToken(t *testing.T) {
+	static, err := accounts.connect(t, nats.UserInfo("mqtt", "mqtt"))
 	require.NoError(t, err)
-	sub, err := static.SubscribeSync("de.pflege.mqtt.>")
+	sub, err := static.SubscribeSync("devices.>")
 	require.NoError(t, err)
 	other, err := static.SubscribeSync("other.>")
 	require.NoError(t, err)
 	require.NoError(t, static.Flush())
 
 	var client mqtt.Client
-	calls := management.calloutDelta(t, func() {
+	calls := accounts.calloutDelta(t, func() {
 		client, err = mqttClient(t, passwordToken(t, "dave", "dave"))
 		require.NoError(t, err)
 	})
 	assert.EqualValues(t, 1, calls, "MQTT password must be sent to the callout as token")
 
 	t.Run("publishes into the MQTT account", func(t *testing.T) {
-		mqttWait(t, client.Publish("de/pflege/mqtt/hello", 0, false, "hi"))
+		mqttWait(t, client.Publish("devices/hello", 0, false, "hi"))
 		msg, err := sub.NextMsg(2 * time.Second)
 		require.NoError(t, err)
-		assert.Equal(t, "de.pflege.mqtt.hello", msg.Subject)
+		assert.Equal(t, "devices.hello", msg.Subject)
 	})
 
 	t.Run("receives with QoS 1", func(t *testing.T) {
 		got := make(chan string, 1)
-		mqttWait(t, client.Subscribe("de/pflege/mqtt/#", 1, func(_ mqtt.Client, m mqtt.Message) { got <- m.Topic() }))
-		require.NoError(t, static.Publish("de.pflege.mqtt.from-nats", []byte("x")))
+		mqttWait(t, client.Subscribe("devices/#", 1, func(_ mqtt.Client, m mqtt.Message) { got <- m.Topic() }))
+		require.NoError(t, static.Publish("devices.from-nats", []byte("x")))
 		select {
 		case topic := <-got:
-			assert.Equal(t, "de/pflege/mqtt/from-nats", topic)
+			assert.Equal(t, "devices/from-nats", topic)
 		case <-time.After(5 * time.Second):
 			t.Fatal("no MQTT message received")
 		}
@@ -162,14 +162,14 @@ func TestManagementMQTTWithToken(t *testing.T) {
 	})
 }
 
-func TestManagementRejects(t *testing.T) {
+func TestAccountsRejects(t *testing.T) {
 	t.Run("MQTT with invalid token", func(t *testing.T) {
 		_, err := mqttClient(t, "garbage")
 		assert.Error(t, err)
 	})
-	t.Run("token without management role", func(t *testing.T) {
-		// alice only has events-read, which management does not map.
-		_, err := management.connect(t, nats.Token(passwordToken(t, "alice", "alice")))
+	t.Run("token without a mapped role", func(t *testing.T) {
+		// alice only has events-read, which this deployment does not map.
+		_, err := accounts.connect(t, nats.Token(passwordToken(t, "alice", "alice")))
 		assert.ErrorIs(t, err, nats.ErrAuthorization)
 	})
 }

@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Open point: does no_auth_user still work (NACK, legacy clients) once auth callout is on?
+// Open point: does no_auth_user still work (anonymous and legacy clients) once auth callout is on?
 func TestNoAuthUserBypassesCallout(t *testing.T) {
 	var nc *nats.Conn
 	calls := global.calloutDelta(t, func() {

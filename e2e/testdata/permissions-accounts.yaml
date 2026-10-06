@@ -1,4 +1,4 @@
-# Mirrors the cc-gitops management role mapping.
+# Role mapping for the named-accounts deployment (see nats-accounts.conf).
 issuers:
   - url: http://placeholder/realms/test # replaced by the test
     audience: nats
@@ -22,8 +22,8 @@ roles:
         - "$JS.ACK.*.>"
   nats-mqtt:
     account: MQTT
-    # MQTT "de/pflege/mqtt/#" also matches the parent topic, so allow it explicitly.
+    # MQTT "devices/#" also matches the parent topic, so allow it explicitly.
     pub:
-      allow: ["de.pflege.mqtt", "de.pflege.mqtt.>"]
+      allow: ["devices", "devices.>"]
     sub:
-      allow: ["de.pflege.mqtt", "de.pflege.mqtt.>"]
+      allow: ["devices", "devices.>"]

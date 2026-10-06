@@ -15,11 +15,11 @@
         },
         {
           "name": "nats-audit-read",
-          "description": "Management: read AUDIT streams"
+          "description": "Named accounts: read AUDIT streams"
         },
         {
           "name": "nats-mqtt",
-          "description": "Management: MQTT topics de/pflege/mqtt/#"
+          "description": "Named accounts: MQTT topics devices/#"
         }
       ]
     }

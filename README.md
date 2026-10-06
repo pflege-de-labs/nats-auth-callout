@@ -43,6 +43,8 @@ authorization {
 }
 ```
 
+A setup with named accounts uses a dedicated `account: AUTH` for the callout user instead.
+
 Every connection whose user is not listed in `auth_users` goes to the callout. That includes users
 of other accounts such as `$SYS`. See the [e2e findings](#e2e-findings).
 
@@ -58,7 +60,7 @@ Example user seeds used in `.devcontainer/nkey/`:
 - User nkey (example only): `SUACMAYZT6D72E4OXC2EAKWK4IMLNFJO6XRBARNQJST4QTQYOQ5GPVCGWY`
 - Sys user nkey (example only): `SUAK2LGYKMUC7MDWKIPZEEL7LVLXMKYZSWTACSJ5LGA7RQ34LWA5RM5Q5E`
 
-The devcontainer starts NATS (config mirrors the cc-gitops production setup) and Keycloak with the
+The devcontainer starts NATS (static users in the global account) and Keycloak with the
 `test` realm (`alice` with role `events-read`, `bob` without roles, service account `svc-orders`).
 
 ```sh
@@ -73,16 +75,17 @@ export DOCKER_HOST=unix://$(podman machine inspect --format '{{.ConnectionInfo.P
 export TESTCONTAINERS_RYUK_DISABLED=true
 ```
 
-The e2e suite runs two deployments: `global` (production/staging style, static users in `$G`) and
-`management` (named accounts, MQTT, [testdata](e2e/testdata)). `NATS_IMAGE` and
-`NATS_MANAGEMENT_IMAGE` override their nats-server images (defaults: the cc-gitops versions).
+The e2e suite runs two deployments: `global` (static users in the global account `$G`) and
+`accounts` (named accounts and MQTT, [testdata](e2e/testdata)). `NATS_IMAGE` and
+`NATS_ACCOUNTS_IMAGE` override their nats-server images (defaults: the versions the suite is
+verified against).
 
 ### e2e findings
 
-Verified against nats-server 2.12.6 and 2.14.7 in config mode:
+NATS with the global account (`$G`), nats-server 2.12.6 and 2.14.7:
 
 - `no_auth_user` still works with auth callout, as long as that user is in `auth_users`. Anonymous
-  clients (e.g. NACK) connect as that user without a callout request.
+  clients (e.g. controllers) connect as that user without a callout request.
 - Callout users can be placed in `$G`. They exchange messages with static users and see the
   streams of the global account.
 - `$SYS` users are sent to the callout unless they are listed in `auth_users`.

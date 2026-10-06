@@ -8,7 +8,7 @@
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
-      "description": "Keep the e2e/devcontainer NATS image on the cc-gitops production version",
+      "description": "Keep NATS server images pinned to the versions the e2e suite is verified against",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["nats"],
       "enabled": false
