@@ -1,0 +1,11 @@
+nats-auth-callout {{ .Chart.AppVersion }} is deployed as {{ include "nats-auth-callout.fullname" . }}.
+
+It connects to {{ .Values.nats.url }} as user "{{ .Values.nats.authUser }}". The NATS server must have
+an auth_callout block whose issuer/xkey match the seeds in Secret {{ include "nats-auth-callout.secretName" . }}
+and must list "{{ .Values.nats.authUser }}" and every static user in auth_users.
+
+Check readiness (NATS connection and OIDC discovery):
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "nats-auth-callout.fullname" . }}
+
+Guide: https://github.com/pflege-de-labs/nats-auth-callout/blob/main/docs/deployment.md

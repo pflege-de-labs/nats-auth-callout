@@ -1,0 +1,127 @@
+{{- $keys := fromYaml (include "nats-auth-callout.secretKeys" .) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nats-auth-callout.fullname" . }}
+  labels:
+    {{- include "nats-auth-callout.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nats-auth-callout.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if not .Values.existingConfigMap }}
+        checksum/permissions: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.secret.create }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "nats-auth-callout.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "nats-auth-callout.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.spreadAcrossNodes }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "nats-auth-callout.selectorLabels" . | nindent 14 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: nats-auth-callout
+          image: {{ include "nats-auth-callout.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NATS_URL
+              value: {{ .Values.nats.url | quote }}
+            - name: AUTH_USER
+              value: {{ .Values.nats.authUser | quote }}
+            - name: AUTH_PASSWORD_FILE
+              value: /etc/nats-auth-callout/secrets/password
+            - name: ISSUER_NKEY_FILE
+              value: /etc/nats-auth-callout/secrets/issuer-seed
+            {{- if .Values.xkey.enabled }}
+            - name: XKEY_FILE
+              value: /etc/nats-auth-callout/secrets/xkey-seed
+            {{- end }}
+            - name: PERMISSIONS_FILE
+              value: /etc/nats-auth-callout/config/permissions.yaml
+            - name: LISTEN
+              value: {{ printf ":%d" (int .Values.service.port) | quote }}
+            {{- if .Values.config.debug }}
+            - name: DEBUG
+              value: "true"
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nats-auth-callout/config
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/nats-auth-callout/secrets
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "nats-auth-callout.configMapName" . }}
+            items:
+              - key: permissions.yaml
+                path: permissions.yaml
+        - name: secrets
+          secret:
+            secretName: {{ include "nats-auth-callout.secretName" . }}
+            items:
+              - key: {{ $keys.issuerSeed }}
+                path: issuer-seed
+              - key: {{ $keys.password }}
+                path: password
+              {{- if .Values.xkey.enabled }}
+              - key: {{ $keys.xkeySeed }}
+                path: xkey-seed
+              {{- end }}

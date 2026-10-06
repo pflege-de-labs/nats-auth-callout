@@ -40,7 +40,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      # renovate: datasource=go depName=golang.org/x/vuln
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
   gosec:
@@ -51,5 +50,4 @@ jobs:
         with:
           go-version-file: go.mod
       # Built with the module's Go version; the gosec action image may lag behind.
-      # renovate: datasource=go depName=github.com/securego/gosec/v2
       - run: go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 ./...

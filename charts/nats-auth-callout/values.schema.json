@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["nats"],
+  "properties": {
+    "replicaCount": { "type": "integer", "minimum": 1 },
+    "image": {
+      "type": "object",
+      "required": ["repository"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "nats": {
+      "type": "object",
+      "required": ["url", "authUser"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^(nats|tls|ws|wss)://" },
+        "authUser": { "type": "string", "minLength": 1 }
+      }
+    },
+    "secret": {
+      "type": "object",
+      "properties": {
+        "existingSecret": { "type": "string" },
+        "create": { "type": "boolean" },
+        "keys": {
+          "type": "object",
+          "required": ["issuerSeed", "xkeySeed", "password"]
+        }
+      }
+    },
+    "xkey": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+    "permissions": { "type": "object" },
+    "existingConfigMap": { "type": "string" },
+    "service": {
+      "type": "object",
+      "properties": { "port": { "type": "integer", "minimum": 1, "maximum": 65535 } }
+    }
+  }
+}

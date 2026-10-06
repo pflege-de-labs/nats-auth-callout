@@ -1,0 +1,14 @@
+{{- if not .Values.existingConfigMap }}
+{{- if not .Values.permissions }}
+{{- fail "permissions (issuers, roles) or existingConfigMap is required" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nats-auth-callout.fullname" . }}
+  labels:
+    {{- include "nats-auth-callout.labels" . | nindent 4 }}
+data:
+  permissions.yaml: |
+    {{- toYaml .Values.permissions | nindent 4 }}
+{{- end }}

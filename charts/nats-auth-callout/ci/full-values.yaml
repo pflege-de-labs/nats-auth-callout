@@ -1,0 +1,40 @@
+replicaCount: 3
+image:
+  tag: 1.2.3
+imagePullSecrets:
+  - name: pull
+nats:
+  url: tls://nats.example.com:4222
+  authUser: callout
+secret:
+  existingSecret: custom
+  keys:
+    issuerSeed: ISSUER
+    xkeySeed: XKEY
+    password: PASS
+existingConfigMap: my-permissions
+xkey:
+  enabled: false
+service:
+  port: 9000
+podAnnotations:
+  a: b
+podLabels:
+  c: d
+priorityClassName: high
+nodeSelector:
+  disk: ssd
+tolerations:
+  - key: dedicated
+    operator: Exists
+serviceAccount:
+  annotations:
+    example.com/note: "y"
+serviceMonitor:
+  enabled: true
+  scrapeTimeout: 10s
+  labels:
+    release: prometheus
+extraEnv:
+  - name: HTTPS_PROXY
+    value: http://proxy:3128
