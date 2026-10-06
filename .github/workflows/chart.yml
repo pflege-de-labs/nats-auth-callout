@@ -26,16 +26,25 @@ jobs:
         with:
           # renovate: datasource=github-releases depName=helm/helm
           version: v4.2.4
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
+      - name: Install kubeconform
+        env:
+          # renovate: datasource=github-releases depName=yannh/kubeconform
+          KUBECONFORM_VERSION: v0.8.0
+          # sha256 of kubeconform-linux-amd64.tar.gz, update it together with the version (see CHECKSUMS in the release).
+          KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+        run: |
+          curl -fsSL -o kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum --check --strict
+          tar -xzf kubeconform.tar.gz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
       - name: Lint and validate every values variant in ci/
         run: |
           for values in "$CHART"/ci/*.yaml; do
             echo "::group::$values"
             helm lint --strict "$CHART" -f "$values"
             helm template ci "$CHART" -f "$values" |
-              go run github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0 -strict -summary \
+              kubeconform -strict -summary \
                 -kubernetes-version 1.33.0 \
                 -schema-location default \
                 -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
