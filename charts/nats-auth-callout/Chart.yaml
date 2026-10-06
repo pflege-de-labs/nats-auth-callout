@@ -2,10 +2,10 @@ apiVersion: v2
 name: nats-auth-callout
 description: NATS auth callout that authenticates clients with OIDC access tokens (e.g. Keycloak)
 type: application
-# Releases override version and appVersion with the git tag, see .github/workflows/chart.yml.
-version: 0.0.0-dev
-# Development default: floating image tag of the main branch.
-appVersion: main
+# Chart version: bump on every change to the chart. Pushes to main release a new version, see .github/workflows/chart.yml.
+version: 0.1.0
+# Image version (tag without "v") the chart deploys by default. Independent of the chart version.
+appVersion: "0.1.0"
 home: https://github.com/pflege-de-labs/nats-auth-callout
 sources:
   - https://github.com/pflege-de-labs/nats-auth-callout

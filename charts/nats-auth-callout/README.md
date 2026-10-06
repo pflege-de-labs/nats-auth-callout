@@ -36,8 +36,7 @@ permissions:
         allow: ["events.>"]
 ```
 
-Released charts pin the image to the same version (`appVersion`). A chart from a git checkout
-uses the floating `main` image unless `image.tag` is set.
+The chart deploys the image version in its `appVersion` unless `image.tag` is set.
 
 ## Values
 
@@ -67,3 +66,19 @@ uses the floating `main` image unless `image.tag` is set.
 Changes to the permissions ConfigMap (and to a Secret created by the chart) roll the pods through a
 checksum annotation. With `existingConfigMap` or `secret.existingSecret` you have to restart the
 deployment yourself.
+
+## Releasing
+
+Chart and image are versioned independently. The chart `version` follows the chart's own changes,
+`appVersion` is the image version it deploys by default (the image tag without the `v`).
+
+1. Change the chart and bump `version` in `Chart.yaml` (semver: new values or templates that change
+   behavior are a minor bump, fixes a patch bump). Bump `appVersion` as well to ship a newer image.
+   A PR check fails if chart files changed but `version` did not.
+2. Merging to `main` releases the chart if its version has no release yet: it is pushed to
+   `oci://ghcr.io/pflege-de-labs/charts/nats-auth-callout:<version>`, signed with cosign, and a GitHub
+   release `nats-auth-callout-<version>` with the package is created.
+
+Images are released separately by pushing a `v<major>.<minor>.<patch>` tag, which builds
+`ghcr.io/pflege-de-labs/nats-auth-callout:<major>.<minor>.<patch>`. Tag the image before a chart
+release that points to it.
