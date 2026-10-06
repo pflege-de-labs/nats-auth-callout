@@ -5,12 +5,18 @@
     "helpers:pinGitHubActionDigests",
     ":semanticCommits"
   ],
-  "postUpdateOptions": ["gomodTidy"],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "packageRules": [
     {
       "description": "Keep NATS server images pinned to the versions the e2e suite is verified against",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["nats"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "nats"
+      ],
       "enabled": false
     }
   ],
@@ -18,16 +24,33 @@
     {
       "customType": "regex",
       "description": "Go tools run via go run in workflows",
-      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/"
+      ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s*- run: go run \\S+@(?<currentValue>v[^\\s]+)"
+        "go run (?<depName>[a-z0-9.\\-/]+?)/cmd/[a-z0-9\\-]+@(?<currentValue>v[0-9][^\\s]*)"
+      ],
+      "datasourceTemplate": "go"
+    },
+    {
+      "customType": "regex",
+      "description": "Tool versions annotated with a renovate comment",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s*version: (?<currentValue>\\S+)"
       ]
     },
     {
       "customType": "regex",
       "description": "Container images referenced in e2e tests",
-      "managerFilePatterns": ["/^e2e/.+\\.go$/"],
-      "matchStrings": ["\"(?<depName>[a-z0-9.\\-/]+):(?<currentValue>[0-9][^\"]*)\""],
+      "managerFilePatterns": [
+        "/^e2e/.+\\.go$/"
+      ],
+      "matchStrings": [
+        "\"(?<depName>[a-z0-9.\\-/]+):(?<currentValue>[0-9][^\"]*)\""
+      ],
       "datasourceTemplate": "docker"
     }
   ]

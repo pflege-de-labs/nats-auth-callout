@@ -1,0 +1,107 @@
+# Number of callout replicas. Requests are spread over a queue group; use at least 2 for availability.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/pflege-de-labs/nats-auth-callout
+  # Defaults to the chart appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+nats:
+  # NATS server the callout connects to.
+  url: nats://nats:4222
+  # User listed in auth_callout.auth_users on the server.
+  authUser: auth-callout
+
+# Secret with the issuer seed (SA...), the xkey seed (SX...) and the password of nats.authUser.
+secret:
+  # Name of an existing Secret (recommended). Required unless create is true.
+  existingSecret: ""
+  # Key names inside the existing Secret.
+  keys:
+    issuerSeed: issuer-seed
+    xkeySeed: xkey-seed
+    password: password
+  # Create the Secret from values instead (testing only: seeds end up in the Helm release).
+  create: false
+  values:
+    issuerSeed: ""
+    xkeySeed: ""
+    password: ""
+
+# Set to false if auth_callout.xkey is not configured on the NATS server.
+xkey:
+  enabled: true
+
+# Content of the permissions file: trusted OIDC issuers and the role mapping.
+# See docs/deployment.md for the format. Ignored when existingConfigMap is set.
+permissions: {}
+# Name of a ConfigMap holding the permissions file under the key permissions.yaml.
+existingConfigMap: ""
+
+config:
+  debug: false
+
+service:
+  port: 8088
+
+podAnnotations: {}
+podLabels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  periodSeconds: 10
+  failureThreshold: 3
+
+# Prefer different nodes for the replicas.
+spreadAcrossNodes: true
+affinity: {}
+nodeSelector: {}
+tolerations: []
+priorityClassName: ""
+
+podDisruptionBudget:
+  # Only rendered when replicaCount > 1.
+  enabled: true
+  minAvailable: 1
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: ""
+  labels: {}
+
+extraEnv: []

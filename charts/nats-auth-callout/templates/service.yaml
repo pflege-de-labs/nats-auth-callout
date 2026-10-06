@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nats-auth-callout.fullname" . }}
+  labels:
+    {{- include "nats-auth-callout.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "nats-auth-callout.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
