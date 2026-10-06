@@ -12,6 +12,20 @@ for long-running clients so that a reconnect fetches a fresh token). The callout
 
 Encrypted callout requests (`auth_callout.xkey`) are supported.
 
+## Deployment
+
+The full guide is in [docs/deployment.md](docs/deployment.md): keys, NATS configuration (global
+account and named accounts), Keycloak setup, permissions file, deployment, client usage, migration and
+troubleshooting.
+
+In short, you need
+
+- an issuer key and an xkey, and a user for the callout in the NATS config with `auth_callout` set up,
+- an OIDC client with an audience mapper and roles (Keycloak),
+- the permissions file that maps roles to accounts and subjects, and
+- the service itself: image `ghcr.io/pflege-de-labs/nats-auth-callout` or the
+  [Helm chart](charts/nats-auth-callout/README.md) `oci://ghcr.io/pflege-de-labs/charts/nats-auth-callout`.
+
 ## Configuration
 
 | Flag / env | Purpose |
@@ -30,6 +44,8 @@ Per issuer, `discoveryURL` can point to an in-cluster address while `url` stays 
 issuer that appears in the tokens' `iss` claim.
 
 ### nats-server (config mode)
+
+See the [deployment guide](docs/deployment.md#2-configure-nats) for complete examples.
 
 ```
 authorization {
