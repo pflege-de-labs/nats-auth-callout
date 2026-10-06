@@ -1,7 +1,7 @@
 //go:build e2e
 
 // Package e2e runs the callout against real nats-server and Keycloak containers.
-// Each deployment mirrors one cc-gitops NATS setup and gets its own callout instance.
+// Each deployment is one NATS server constellation and gets its own callout instance.
 package e2e
 
 import (
@@ -47,17 +47,17 @@ type deployment struct {
 var (
 	keycloakURL string
 
-	// global mirrors cc-gitops production/staging: static users in $G.
+	// global: static users in the global account ($G).
 	global = &deployment{
 		image: cmp.Or(os.Getenv("NATS_IMAGE"), "nats:2.12.6-alpine"),
 		conf:  filepath.Join(devcontainer, "nats", "nats.conf"),
 		perms: filepath.Join(devcontainer, "callout", "permissions.yaml"),
 	}
-	// management mirrors cc-gitops management: named accounts, MQTT, no_auth_user in MQTT.
-	management = &deployment{
-		image:    cmp.Or(os.Getenv("NATS_MANAGEMENT_IMAGE"), "nats:2.14.0-alpine"),
-		conf:     filepath.Join("testdata", "nats-management.conf"),
-		perms:    filepath.Join("testdata", "permissions-management.yaml"),
+	// accounts: named accounts, MQTT, no_auth_user in a named account.
+	accounts = &deployment{
+		image:    cmp.Or(os.Getenv("NATS_ACCOUNTS_IMAGE"), "nats:2.14.0-alpine"),
+		conf:     filepath.Join("testdata", "nats-accounts.conf"),
+		perms:    filepath.Join("testdata", "permissions-accounts.yaml"),
 		withMQTT: true,
 	}
 )
@@ -78,7 +78,7 @@ func run(m *testing.M) int {
 	}
 
 	var stops []<-chan struct{}
-	for _, d := range []*deployment{global, management} {
+	for _, d := range []*deployment{global, accounts} {
 		err := d.start(ctx)
 		defer terminate(d.container)
 		if err != nil {

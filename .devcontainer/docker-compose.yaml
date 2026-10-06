@@ -17,7 +17,7 @@ services:
       - nats
 
   nats:
-    # Same version as cc-gitops production.
+    # Version used by the e2e global-account tests.
     image: nats:2.12.6-alpine
     volumes:
       - js-data:/data
