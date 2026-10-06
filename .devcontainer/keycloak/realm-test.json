@@ -74,6 +74,28 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "nats-short",
+      "name": "NATS with 5 second access tokens (expiry tests)",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "5"
+      },
+      "protocolMappers": [
+        {
+          "name": "nats-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "nats",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ],
   "users": [

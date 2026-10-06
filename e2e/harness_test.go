@@ -38,8 +38,10 @@ type deployment struct {
 	conf      string
 	perms     string
 	withMQTT  bool
+	withWS    bool
 	natsURL   string
 	mqttURL   string
+	wsURL     string
 	callouts  atomic.Int64
 	container testcontainers.Container
 }
@@ -49,9 +51,10 @@ var (
 
 	// global: static users in the global account ($G).
 	global = &deployment{
-		image: cmp.Or(os.Getenv("NATS_IMAGE"), "nats:2.12.6-alpine"),
-		conf:  filepath.Join(devcontainer, "nats", "nats.conf"),
-		perms: filepath.Join(devcontainer, "callout", "permissions.yaml"),
+		image:  cmp.Or(os.Getenv("NATS_IMAGE"), "nats:2.12.6-alpine"),
+		conf:   filepath.Join(devcontainer, "nats", "nats.conf"),
+		perms:  filepath.Join(devcontainer, "callout", "permissions.yaml"),
+		withWS: true,
 	}
 	// accounts: named accounts, MQTT, no_auth_user in a named account.
 	accounts = &deployment{
@@ -140,6 +143,9 @@ func (d *deployment) start(ctx context.Context) error {
 	if d.withMQTT {
 		ports = append(ports, "1883/tcp")
 	}
+	if d.withWS {
+		ports = append(ports, "8080/tcp")
+	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		Started: true,
 		ContainerRequest: testcontainers.ContainerRequest{
@@ -162,7 +168,12 @@ func (d *deployment) start(ctx context.Context) error {
 		return err
 	}
 	if d.withMQTT {
-		d.mqttURL, err = c.PortEndpoint(ctx, "1883/tcp", "tcp")
+		if d.mqttURL, err = c.PortEndpoint(ctx, "1883/tcp", "tcp"); err != nil {
+			return err
+		}
+	}
+	if d.withWS {
+		d.wsURL, err = c.PortEndpoint(ctx, "8080/tcp", "ws")
 	}
 	return err
 }
@@ -320,14 +331,27 @@ func serviceToken(t *testing.T) string {
 
 func token(t *testing.T, form url.Values) string {
 	t.Helper()
-	resp, err := http.PostForm(keycloakURL+"/realms/test/protocol/openid-connect/token", form)
+	tok, err := fetchToken(form)
 	require.NoError(t, err)
+	return tok
+}
+
+// fetchToken is usable from nats.go handlers, which cannot fail a test directly.
+func fetchToken(form url.Values) (string, error) {
+	resp, err := http.PostForm(keycloakURL+"/realms/test/protocol/openid-connect/token", form)
+	if err != nil {
+		return "", err
+	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("token endpoint: %d %s", resp.StatusCode, body)
+	}
 	var tr struct {
 		AccessToken string `json:"access_token"`
 	}
-	require.NoError(t, json.Unmarshal(body, &tr))
-	return tr.AccessToken
+	if err := json.Unmarshal(body, &tr); err != nil {
+		return "", err
+	}
+	return tr.AccessToken, nil
 }
