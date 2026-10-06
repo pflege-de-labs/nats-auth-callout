@@ -15,7 +15,7 @@ kubectl create secret generic nats-auth-callout \
   --from-file=issuer-seed --from-file=xkey-seed --from-file=password
 
 helm install nats-auth-callout oci://ghcr.io/pflege-de-labs/charts/nats-auth-callout \
-  --version <release> -f values.yaml
+  --version <chart version> -f values.yaml
 ```
 
 Minimal `values.yaml`:

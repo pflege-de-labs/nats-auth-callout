@@ -33,18 +33,15 @@ users) never reach the callout, so you can introduce it next to an existing setu
 | The service | container image, Helm chart | [Step 5](#5-deploy-the-callout) |
 | Network | callout → NATS (4222), callout → OIDC provider (HTTPS) | NATS never connects to the callout |
 
-Artifacts, published by the release workflows on every `v*` tag:
+Artifacts (image and chart are released independently and have their own version numbers):
 
-- Image: `ghcr.io/pflege-de-labs/nats-auth-callout:<version>` (also `:main` and `:sha-<commit>` for builds of the main branch), multi-arch, signed with cosign
-- Chart: `oci://ghcr.io/pflege-de-labs/charts/nats-auth-callout`, version = image version, signed with cosign
+- Image: `ghcr.io/pflege-de-labs/nats-auth-callout:<version>`, published for every `v<version>` git tag
+  (also `:main` and `:sha-<commit>` for builds of the main branch). Multi-arch, signed with cosign.
+- Chart: `oci://ghcr.io/pflege-de-labs/charts/nats-auth-callout`, published whenever the chart version
+  in `Chart.yaml` is raised on `main`; the GitHub releases `nats-auth-callout-<version>` list them. Signed with
+  cosign. The chart deploys the image version in its `appVersion` unless you set `image.tag`.
 
 If the packages are private, create a pull secret and set `imagePullSecrets` in the chart values.
-
-> [!NOTE]
-> No release has been tagged yet, so there are no version tags or published chart. Until the first
-> `v*` tag, use the `main` or `sha-<commit>` image and install the chart from a checkout:
-> `helm install nats-auth-callout ./charts/nats-auth-callout --set image.tag=sha-<commit> -f values.yaml`.
-> Delete this note once a release exists.
 
 ## 1. Generate keys
 
@@ -223,7 +220,7 @@ callout too.
 
 ```sh
 helm install nats-auth-callout oci://ghcr.io/pflege-de-labs/charts/nats-auth-callout \
-  --namespace nats --version <release> -f values.yaml
+  --namespace nats --version <chart version> -f values.yaml
 ```
 
 ```yaml
