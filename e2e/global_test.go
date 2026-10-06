@@ -5,8 +5,10 @@ package e2e
 import (
 	"context"
 	"errors"
+	"net/url"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -140,4 +142,82 @@ func TestRejectedTokens(t *testing.T) {
 			assert.True(t, errors.Is(err, nats.ErrAuthorization), "got %v", err)
 		})
 	}
+}
+
+func shortLivedToken() (string, error) {
+	return fetchToken(url.Values{
+		"grant_type": {"password"},
+		"client_id":  {"nats-short"},
+		"username":   {"alice"},
+		"password":   {"alice"},
+	})
+}
+
+// The user JWT expires with the access token, so NATS drops the connection at that point.
+func TestConnectionEndsWhenTokenExpires(t *testing.T) {
+	tok, err := shortLivedToken()
+	require.NoError(t, err)
+
+	closed := make(chan struct{})
+	start := time.Now()
+	_, err = global.connect(t,
+		nats.Token(tok),
+		nats.ClosedHandler(func(*nats.Conn) { close(closed) }),
+	)
+	require.NoError(t, err)
+
+	select {
+	case <-closed:
+		assert.Greater(t, time.Since(start), 2*time.Second, "closed before the token expired")
+	case <-time.After(20 * time.Second):
+		t.Fatal("connection still open after the token expired")
+	}
+}
+
+// A token handler fetches a fresh token for every (re)connect, so expiry only causes a reconnect.
+func TestTokenHandlerReconnectsWithFreshToken(t *testing.T) {
+	var calls atomic.Int64
+	reconnected := make(chan struct{}, 1)
+	nc, err := nats.Connect(global.natsURL,
+		nats.TokenHandler(func() string {
+			calls.Add(1)
+			tok, _ := shortLivedToken()
+			return tok
+		}),
+		nats.ReconnectWait(200*time.Millisecond),
+		nats.MaxReconnects(-1),
+		nats.ReconnectHandler(func(*nats.Conn) { reconnected <- struct{}{} }),
+	)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	select {
+	case <-reconnected:
+	case <-time.After(20 * time.Second):
+		t.Fatal("client did not reconnect after its token expired")
+	}
+	assert.GreaterOrEqual(t, calls.Load(), int64(2))
+	assert.True(t, nc.IsConnected())
+}
+
+// Browser clients use the websocket listener; the token travels in the same connect options.
+func TestTokenOverWebsocket(t *testing.T) {
+	var nc *nats.Conn
+	calls := global.calloutDelta(t, func() {
+		var err error
+		nc, err = nats.Connect(global.wsURL, nats.Name("browser"), nats.Token(passwordToken(t, "alice", "alice")), nats.MaxReconnects(0))
+		require.NoError(t, err)
+		t.Cleanup(nc.Close)
+	})
+	assert.EqualValues(t, 1, calls)
+	assert.Equal(t, config.GlobalAccount, global.connz(t, "browser").Account)
+
+	sub, err := nc.SubscribeSync("events.ws")
+	require.NoError(t, err)
+	require.NoError(t, nc.Flush())
+	static, err := global.connect(t, nats.UserInfo("legacy", "legacy"))
+	require.NoError(t, err)
+	require.NoError(t, static.Publish("events.ws", []byte("x")))
+	_, err = sub.NextMsg(2 * time.Second)
+	assert.NoError(t, err)
 }
