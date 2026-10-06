@@ -1,14 +1,17 @@
 name: chart
 
+# The chart is versioned independently of the image: pushing a new `version` in Chart.yaml to main
+# releases it. Image releases (v* tags) are handled by image.yml.
 on:
   pull_request:
     paths:
       - "charts/**"
       - ".github/workflows/chart.yml"
-  # No path filter: path filters and tags don't combine reliably, and linting is cheap.
   push:
     branches: [main]
-    tags: ["v*"]
+    paths:
+      - "charts/**"
+      - ".github/workflows/chart.yml"
 
 permissions:
   contents: read
@@ -26,6 +29,29 @@ jobs:
         with:
           # renovate: datasource=github-releases depName=helm/helm
           version: v4.2.4
+      - name: Chart version must change with the chart
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # A push to main only releases a chart whose version has no release yet.
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          if ! git cat-file -e "FETCH_HEAD:$CHART/Chart.yaml" 2>/dev/null; then
+            echo "New chart, nothing to compare."
+            exit 0
+          fi
+          # Same files as the packaged chart: .helmignore leaves out ci/ and *.md.
+          if git diff --quiet FETCH_HEAD -- "$CHART" ":(exclude)$CHART/ci" ":(exclude)$CHART/*.md"; then
+            echo "No packaged chart files changed."
+            exit 0
+          fi
+          base=$(git show "FETCH_HEAD:$CHART/Chart.yaml" | sed -n 's/^version: *//p')
+          head=$(sed -n 's/^version: *//p' "$CHART/Chart.yaml")
+          if [ "$base" = "$head" ]; then
+            echo "::error file=$CHART/Chart.yaml::Chart files changed but version is still $head. Bump it, otherwise nothing is released."
+            exit 1
+          fi
+          echo "Chart version $base -> $head"
       - name: Install kubeconform
         env:
           # renovate: datasource=github-releases depName=yannh/kubeconform
@@ -51,42 +77,80 @@ jobs:
             echo "::endgroup::"
           done
 
-  publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+  release:
+    if: github.event_name == 'push'
     needs: lint
     runs-on: ubuntu-latest
+    # Two pushes must not race on the same release.
+    concurrency:
+      group: chart-release
+      cancel-in-progress: false
     permissions:
-      contents: read
+      # Releases and tags.
+      contents: write
+      # OCI registry.
       packages: write
       # Keyless cosign signing via GitHub OIDC.
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The releaser compares against the latest tag.
+          fetch-depth: 0
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           # renovate: datasource=github-releases depName=helm/helm
           version: v4.2.4
+      - name: Configure git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+      # Pushes every chart whose Chart.yaml version has no GitHub release yet to the OCI registry
+      # and creates the release <chart>-<version>.
+      - name: Release charts
+        uses: bitdeps/helm-oci-charts-releaser@caedceea2a5ab997c7e5469a999811dbb3d5b070 # v0.1.5
+        with:
+          charts_dir: charts
+          oci_registry: ${{ env.REGISTRY }}
+          oci_username: ${{ github.actor }}
+          oci_password: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Use the helm installed above instead of the action's own pinned one.
+          skip_helm_install: true
+          skip_dependencies: true
+          # The script fails with "unbound variable" when these are left unset, and its outputs are not usable.
+          skip_existing: true
+          skip_gh_release: false
+          mark_as_latest: true
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-      - name: Package and push
-        id: push
+      - name: Install crane
         env:
-          TAG: ${{ github.ref_name }}
+          # renovate: datasource=github-releases depName=google/go-containerregistry
+          CRANE_VERSION: v0.22.1
+          # sha256 of go-containerregistry_Linux_x86_64.tar.gz, update it together with the version (see checksums.txt in the release).
+          CRANE_SHA256: 0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0
+        run: |
+          curl -fsSL -o crane.tar.gz \
+            "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
+          echo "${CRANE_SHA256}  crane.tar.gz" | sha256sum --check --strict
+          tar -xzf crane.tar.gz crane
+          sudo install -m 0755 crane /usr/local/bin/crane
+      # The releaser reports what it released unreliably, so sign the version in Chart.yaml unless it is signed already.
+      - name: Sign chart
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
         run: |
-          version="${TAG#v}"
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "tag $TAG is not a semver version" >&2
-            exit 1
+          name=$(sed -n 's/^name: *//p' "$CHART/Chart.yaml")
+          version=$(sed -n 's/^version: *//p' "$CHART/Chart.yaml")
+          echo "$GH_TOKEN" | crane auth login ghcr.io -u "$ACTOR" --password-stdin
+          digest=$(crane digest "$REGISTRY/$name:$version")
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "could not read digest of $name:$version" >&2; exit 1; }
+          ref="$REGISTRY/$name@$digest"
+          if cosign verify "$ref" \
+              --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/chart.yml@${GITHUB_REF}" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null 2>&1; then
+            echo "$name:$version is already signed"
+          else
+            cosign sign --yes "$ref"
           fi
-          echo "$GH_TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
-          # The release tag also selects the image (appVersion), see image.yml.
-          helm package "$CHART" --version "$version" --app-version "$version" --destination dist
-          helm push "dist/nats-auth-callout-${version}.tgz" "oci://$REGISTRY" 2>&1 | tee push.txt
-          digest=$(awk '/^Digest:/ { print $2 }' push.txt)
-          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "could not read chart digest" >&2; exit 1; }
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
-      - name: Sign chart
-        env:
-          DIGEST: ${{ steps.push.outputs.digest }}
-        run: cosign sign --yes "$REGISTRY/nats-auth-callout@${DIGEST}"
