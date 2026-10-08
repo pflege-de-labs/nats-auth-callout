@@ -1,0 +1,44 @@
+name: release
+
+# Image releases: a v* tag on main. The chart is released by chart.yml on its own version.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    uses: pflege-de-labs/github-workflows/.github/workflows/release-guard.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+
+  # The release rebuilds its artifacts, so the tagged commit is gated here rather than by main's last CI run.
+  verify:
+    needs: guard
+    uses: pflege-de-labs/github-workflows/.github/workflows/go-checks.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    with:
+      test-command: go test -race -coverprofile=coverage.out ./internal/...
+      coverage-threshold: 75
+      # renovate: datasource=go depName=github.com/securego/gosec/v2
+      gosec-version: v2.29.0
+
+  image:
+    needs: verify
+    uses: pflege-de-labs/github-workflows/.github/workflows/image-release.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+  secobserve:
+    needs: image
+    uses: pflege-de-labs/github-workflows/.github/workflows/secobserve-image.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    permissions:
+      contents: read
+      packages: read
+    with:
+      image: ${{ needs.image.outputs.image }}
+      digest: ${{ needs.image.outputs.digest }}
+      tag: ${{ github.ref_name }}
+    secrets:
+      SO_API_TOKEN: ${{ secrets.SO_API_TOKEN }}

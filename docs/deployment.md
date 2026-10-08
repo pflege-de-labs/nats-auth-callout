@@ -36,10 +36,29 @@ users) never reach the callout, so you can introduce it next to an existing setu
 Artifacts (image and chart are released independently and have their own version numbers):
 
 - Image: `ghcr.io/pflege-de-labs/nats-auth-callout:<version>`, published for every `v<version>` git tag
-  (also `:main` and `:sha-<commit>` for builds of the main branch). Multi-arch, signed with cosign.
+  as `X.Y.Z`, `X.Y` and `X`; `:latest` follows the newest stable tag. Builds of `main` and of pull
+  request branches are tagged `:main`, `:pr-<number>` and the 7-character commit, e.g. `:abc1234`.
+  Multi-arch, signed with cosign; releases also carry SBOM and provenance attestations.
 - Chart: `oci://ghcr.io/pflege-de-labs/charts/nats-auth-callout`, published whenever the chart version
   in `Chart.yaml` is raised on `main`; the GitHub releases `nats-auth-callout-<version>` list them. Signed with
   cosign. The chart deploys the image version in its `appVersion` unless you set `image.tag`.
+
+The images and charts are built by the shared workflows in
+[pflege-de-labs/github-workflows](https://github.com/pflege-de-labs/github-workflows), so a signature
+names that workflow and carries this repository as its workflow repository. Verify both:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp '^https://github\.com/pflege-de-labs/github-workflows/\.github/workflows/(image-build|image-release|helm-release)\.yml@' \
+  --certificate-github-workflow-repository pflege-de-labs/nats-auth-callout \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/pflege-de-labs/nats-auth-callout:<version>
+```
+
+Chart versions released before the switch were signed by this repository's own `chart.yml`
+(identity `https://github.com/pflege-de-labs/nats-auth-callout/.github/workflows/chart.yml@refs/heads/main`), and
+images before it by `image.yml`; verify those with that identity. The chart version current at the switch may
+also gain a second signature from `helm-release`, which does not recognise the old one.
 
 If the packages are private, create a pull secret and set `imagePullSecrets` in the chart values.
 
