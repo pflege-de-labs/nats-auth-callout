@@ -219,6 +219,10 @@ How tokens are mapped:
 - Roles that are not in `roles` are ignored. A token without any mapped role is rejected.
 - The permissions of all mapped roles are merged. All mapped roles must resolve to the same account,
   otherwise the login is rejected.
+- A connection is always bound to one account. Users with roles in several accounts choose one by
+  sending the account name as the connect *user*; only the roles of that account are used. A user
+  that names no account in `roles` is ignored. Account names must not equal a static user in
+  `auth_users`, because those users never reach the callout.
 - Permission fields per role: `pub` and `sub` (each with `allow` and `deny` subject lists) and `resp`
   (`maxMsgs`, `ttl`) to allow replies to requests. Nothing is allowed that is not listed.
 - The user JWT expires together with the access token.
@@ -317,6 +321,8 @@ nats --server nats://nats.example.com:4222 --token "$TOKEN" sub 'events.>'
   `nats.Token(...)` is disconnected for good, a client with a token handler reconnects with a new token.
   Keep the access token lifespan in Keycloak in mind (default 5 minutes).
 - **MQTT.** The token is the MQTT *password*; use any username that is not listed in `auth_users`.
+- **Choosing an account.** Send the account as user and the token as password (or token):
+  `nats --user AUDIT --password "$TOKEN" ...`, or MQTT username `MQTT`.
 - **Browsers.** Enable the NATS `websocket` listener and send the token in the connect options as
   well. Terminate TLS in front of NATS, tokens are sent in clear text otherwise.
 - **TLS.** Use TLS between clients and NATS in production for the same reason.
@@ -371,7 +377,7 @@ tokens.
 | Log: `untrusted issuer "..."` | The token's `iss` does not equal any `issuers[].url` |
 | Log: `verify token: ...` | Signature, expiry or audience problem; check the audience mapper in Keycloak |
 | Log: `no NATS role assigned` | The token has no role that is in `roles`; check `roleClient`, role assignment and *Full scope allowed* |
-| Log: `roles [...] target different accounts` | Roles of one user map to different accounts |
+| Log: `roles [...] target different accounts` | Roles of one user map to different accounts; connect with the account name as user |
 | Log: `discover issuer ...` / `/readyz` shows `oidc:` | The callout cannot reach the discovery document or `jwks_uri` |
 | Log: `server encrypts auth requests but no xkey is configured` | `auth_callout.xkey` is set in NATS but the callout has no xkey (chart: `xkey.enabled`) |
 | Log: `decrypt auth request` | The xkey seed does not belong to `auth_callout.xkey` |

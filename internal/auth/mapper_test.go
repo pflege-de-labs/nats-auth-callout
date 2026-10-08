@@ -26,7 +26,7 @@ func TestResolveMergesRoles(t *testing.T) {
 		},
 	})
 
-	acc, p, err := m.Resolve([]string{"a", "unknown", "b"})
+	acc, p, err := m.Resolve([]string{"a", "unknown", "b"}, "")
 	require.NoError(t, err)
 	assert.Equal(t, config.GlobalAccount, acc)
 	assert.Equal(t, jwt.StringList{"a.>", "z.>"}, p.Pub.Allow)
@@ -46,10 +46,34 @@ func TestResolveErrors(t *testing.T) {
 		},
 	})
 
-	_, _, err := m.Resolve(nil)
+	_, _, err := m.Resolve(nil, "")
 	assert.ErrorIs(t, err, ErrNoRoles)
-	_, _, err = m.Resolve([]string{"global", "other"})
+	_, _, err = m.Resolve([]string{"global", "other"}, "")
 	assert.ErrorContains(t, err, "different accounts")
-	_, _, err = m.Resolve([]string{"badttl"})
+	_, _, err = m.Resolve([]string{"badttl"}, "")
 	assert.ErrorContains(t, err, "resp.ttl")
+}
+
+func TestResolveRequestedAccount(t *testing.T) {
+	m := NewMapper(&config.Config{
+		DefaultAccount: config.GlobalAccount,
+		Roles: map[string]config.Role{
+			"mqtt-admin":  {Account: "MQTT", Pub: config.Permission{Allow: []string{">"}}},
+			"audit-admin": {Account: "AUDIT", Sub: config.Permission{Allow: []string{">"}}},
+		},
+	})
+	roles := []string{"mqtt-admin", "audit-admin"}
+
+	acc, p, err := m.Resolve(roles, "AUDIT")
+	require.NoError(t, err)
+	assert.Equal(t, "AUDIT", acc)
+	assert.Empty(t, p.Pub.Allow)
+	assert.Equal(t, jwt.StringList{">"}, p.Sub.Allow)
+
+	_, _, err = m.Resolve(roles, "")
+	assert.ErrorContains(t, err, "different accounts")
+	_, _, err = m.Resolve([]string{"mqtt-admin"}, "AUDIT")
+	assert.ErrorIs(t, err, ErrNoRoles)
+	assert.True(t, m.IsAccount("MQTT"))
+	assert.False(t, m.IsAccount("alice"))
 }

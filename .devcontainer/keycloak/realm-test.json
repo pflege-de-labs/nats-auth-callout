@@ -183,6 +183,27 @@
           "nats-mqtt"
         ]
       }
+    },
+    {
+      "username": "erin",
+      "enabled": true,
+      "email": "erin@example.com",
+      "emailVerified": true,
+      "firstName": "Erin",
+      "lastName": "Example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "erin",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "nats": [
+          "nats-audit-read",
+          "nats-mqtt"
+        ]
+      }
     }
   ]
 }
