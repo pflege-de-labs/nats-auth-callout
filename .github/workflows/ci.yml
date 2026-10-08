@@ -5,25 +5,24 @@ on:
   push:
     branches: [main]
 
+# Superseded PR runs are cancelled; main pushes are not, because each commit must produce its own image.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      - run: go vet ./... && go vet -tags e2e ./...
-      - run: go test -race -coverprofile=coverage.out ./internal/...
-      - name: Enforce coverage >= 75%
-        run: |
-          total=$(go tool cover -func=coverage.out | awk '/^total:/ { sub("%", "", $3); print $3 }')
-          echo "Total coverage: ${total}%" | tee -a "$GITHUB_STEP_SUMMARY"
-          awk -v t="$total" 'BEGIN { exit (t < 75) }'
+  checks:
+    uses: pflege-de-labs/github-workflows/.github/workflows/go-checks.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    with:
+      test-command: go test -race -coverprofile=coverage.out ./internal/...
+      coverage-threshold: 75
+      # renovate: datasource=go depName=github.com/securego/gosec/v2
+      gosec-version: v2.29.0
 
+  # The e2e build tag hides these files from the shared checks, so they are vetted and run here.
   e2e:
     runs-on: ubuntu-latest
     steps:
@@ -31,23 +30,28 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - run: go vet -tags e2e ./...
       - run: go test -tags e2e -count=1 -v ./e2e/...
 
-  govulncheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+  image:
+    needs: [checks, e2e]
+    uses: pflege-de-labs/github-workflows/.github/workflows/image-build.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
 
-  gosec:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      # Built with the module's Go version; the gosec action image may lag behind.
-      - run: go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 ./...
+  # Pull requests stay out of SecObserve, so short-lived branches leave no trace there.
+  secobserve:
+    needs: image
+    if: github.event_name != 'pull_request'
+    uses: pflege-de-labs/github-workflows/.github/workflows/secobserve-image.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    permissions:
+      contents: read
+      packages: read
+    with:
+      image: ${{ needs.image.outputs.image }}
+      digest: ${{ needs.image.outputs.digest }}
+      tag: ${{ needs.image.outputs.short-sha }}
+    secrets:
+      SO_API_TOKEN: ${{ secrets.SO_API_TOKEN }}
