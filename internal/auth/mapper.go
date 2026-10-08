@@ -15,16 +15,27 @@ var ErrNoRoles = errors.New("no NATS role assigned")
 
 // Mapper turns token roles into a target account and NATS permissions.
 type Mapper struct {
-	cfg *config.Config
+	cfg      *config.Config
+	accounts map[string]bool
 }
 
 // NewMapper creates a mapper for the given config.
 func NewMapper(cfg *config.Config) *Mapper {
-	return &Mapper{cfg: cfg}
+	accounts := map[string]bool{}
+	for _, r := range cfg.Roles {
+		accounts[cfg.AccountFor(r)] = true
+	}
+	return &Mapper{cfg: cfg, accounts: accounts}
+}
+
+// IsAccount reports whether any role targets the account.
+func (m *Mapper) IsAccount(name string) bool {
+	return m.accounts[name]
 }
 
 // Resolve merges the permissions of all known roles; all must target the same account.
-func (m *Mapper) Resolve(roles []string) (string, jwt.Permissions, error) {
+// A non-empty requested account keeps only the roles of that account.
+func (m *Mapper) Resolve(roles []string, requested string) (string, jwt.Permissions, error) {
 	var (
 		perms   jwt.Permissions
 		account string
@@ -36,6 +47,9 @@ func (m *Mapper) Resolve(roles []string) (string, jwt.Permissions, error) {
 			continue
 		}
 		acc := m.cfg.AccountFor(r)
+		if requested != "" && acc != requested {
+			continue
+		}
 		if account != "" && acc != account {
 			return "", perms, fmt.Errorf("roles %v target different accounts (%s, %s)", append(matched, name), account, acc)
 		}

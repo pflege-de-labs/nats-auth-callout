@@ -84,7 +84,7 @@ func (i *issuer) get(ctx context.Context) (*oidc.IDTokenVerifier, error) {
 
 // Authorize verifies the connect token and builds the NATS user claims.
 func (o *OIDC) Authorize(ctx context.Context, req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, error) {
-	token := req.ConnectOptions.Token
+	token, requested := o.credentials(req.ConnectOptions)
 	if token == "" {
 		return nil, ErrNoToken
 	}
@@ -110,7 +110,7 @@ func (o *OIDC) Authorize(ctx context.Context, req *jwt.AuthorizationRequestClaim
 		return nil, fmt.Errorf("decode token claims: %w", err)
 	}
 
-	account, perms, err := o.mapper.Resolve(tc.roles(is.cfg.RoleClient))
+	account, perms, err := o.mapper.Resolve(tc.roles(is.cfg.RoleClient), requested)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +125,19 @@ func (o *OIDC) Authorize(ctx context.Context, req *jwt.AuthorizationRequestClaim
 	uc.Expires = idt.Expiry.Unix()
 	uc.Permissions = perms
 	return uc, nil
+}
+
+// credentials returns the token and the account requested via the user field.
+// A user naming no known account is ignored, so clients sending arbitrary users keep working.
+func (o *OIDC) credentials(opts jwt.ConnectOptions) (token, account string) {
+	if !o.mapper.IsAccount(opts.Username) {
+		return opts.Token, ""
+	}
+	// "nats --user X --password <token>" sends no token field; MQTT already arrives as token.
+	if opts.Token == "" {
+		return opts.Password, opts.Username
+	}
+	return opts.Token, opts.Username
 }
 
 func (c tokenClaims) roles(client string) []string {

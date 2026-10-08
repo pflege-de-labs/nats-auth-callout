@@ -178,3 +178,38 @@ func TestReadyFailsForUnreachableIssuer(t *testing.T) {
 	_, err := o.Authorize(context.Background(), authRequest(t, tok))
 	assert.ErrorContains(t, err, "discover issuer")
 }
+
+func TestAuthorizeAccountFromUser(t *testing.T) {
+	f := newFakeIssuer(t)
+	o := NewOIDC(testConfig(f.srv.URL))
+	tok := f.token(t, map[string]any{
+		"realm_access":    map[string]any{"roles": []string{"realm-admin"}},
+		"resource_access": map[string]any{"nats": map[string]any{"roles": []string{"events-read"}}},
+	})
+
+	single := f.token(t, map[string]any{"resource_access": map[string]any{"nats": map[string]any{"roles": []string{"events-read"}}}})
+
+	for name, tc := range map[string]struct {
+		user, password, token string
+		want                  string
+	}{
+		"token field":                  {user: "ADMIN", token: tok, want: "ADMIN"},
+		"password field":               {user: config.GlobalAccount, password: tok, want: config.GlobalAccount},
+		"unknown user, mixed accounts": {user: "alice", token: tok},
+		"unknown user, one account":    {user: "alice", token: single, want: config.GlobalAccount},
+		"password needs an account":    {user: "alice", password: tok},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rc := authRequest(t, tc.token)
+			rc.ConnectOptions.Username = tc.user
+			rc.ConnectOptions.Password = tc.password
+			uc, err := o.Authorize(context.Background(), rc)
+			if tc.want == "" {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, uc.Audience)
+		})
+	}
+}

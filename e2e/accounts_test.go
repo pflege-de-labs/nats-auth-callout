@@ -95,11 +95,16 @@ func TestAccountsAuditReader(t *testing.T) {
 
 func mqttClient(t *testing.T, password string) (mqtt.Client, error) {
 	t.Helper()
+	// Any username not listed in auth_users; the password carries the token.
+	return mqttClientAs(t, "token", password)
+}
+
+func mqttClientAs(t *testing.T, user, password string) (mqtt.Client, error) {
+	t.Helper()
 	opts := mqtt.NewClientOptions().
 		AddBroker(accounts.mqttURL).
 		SetClientID("e2e-" + t.Name()).
-		// Any username not listed in auth_users; the password carries the token.
-		SetUsername("token").
+		SetUsername(user).
 		SetPassword(password).
 		SetAutoReconnect(false).
 		SetConnectRetry(false)
@@ -171,5 +176,26 @@ func TestAccountsRejects(t *testing.T) {
 		// alice only has events-read, which this deployment does not map.
 		_, err := accounts.connect(t, nats.Token(passwordToken(t, "alice", "alice")))
 		assert.ErrorIs(t, err, nats.ErrAuthorization)
+	})
+}
+
+func TestAccountsSelectedByUser(t *testing.T) {
+	token := passwordToken(t, "erin", "erin")
+
+	t.Run("token alone is rejected for roles in two accounts", func(t *testing.T) {
+		_, err := accounts.connect(t, nats.Token(token))
+		require.Error(t, err)
+	})
+	for _, account := range []string{"AUDIT", "MQTT"} {
+		t.Run("nats user "+account, func(t *testing.T) {
+			_, err := accounts.connect(t, nats.Name("erin-"+account), nats.UserInfo(account, token))
+			require.NoError(t, err)
+			assert.Equal(t, account, accounts.connz(t, "erin-"+account).Account)
+		})
+	}
+	t.Run("mqtt user MQTT", func(t *testing.T) {
+		client, err := mqttClientAs(t, "MQTT", token)
+		require.NoError(t, err)
+		mqttWait(t, client.Publish("devices/erin", 0, false, "hi"))
 	})
 }
