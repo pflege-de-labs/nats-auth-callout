@@ -28,7 +28,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-const keycloakImage = "quay.io/keycloak/keycloak:26.8.0"
+const keycloakImage = "quay.io/keycloak/keycloak:26.8.1"
 
 var devcontainer = filepath.Join("..", ".devcontainer")
 
