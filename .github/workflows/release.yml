@@ -20,7 +20,7 @@ jobs:
       test-command: go test -race -coverprofile=coverage.out ./internal/...
       coverage-threshold: 75
       # renovate: datasource=go depName=github.com/securego/gosec/v2
-      gosec-version: v2.29.0
+      gosec-version: v2.30.0
 
   image:
     needs: verify
