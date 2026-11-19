@@ -3,7 +3,7 @@ module github.com/pflege-de-labs/nats-auth-callout
 go 1.27
 
 require (
-	github.com/alecthomas/kong v1.16.1
+	github.com/alecthomas/kong v1.17.0
 	github.com/alecthomas/kong-yaml v0.2.0
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
