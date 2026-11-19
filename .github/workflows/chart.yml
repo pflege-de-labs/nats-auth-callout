@@ -93,5 +93,5 @@ jobs:
       id-token: write
     with:
       # renovate: datasource=github-releases depName=helm/helm
-      helm-version: v4.3.0
+      helm-version: v4.3.2
       sign: true
