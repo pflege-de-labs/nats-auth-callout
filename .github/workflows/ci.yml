@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   checks:
-    uses: pflege-de-labs/github-workflows/.github/workflows/go-checks.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    uses: pflege-de-labs/github-workflows/.github/workflows/go-checks.yml@2cf5d3bd6cabe68176ae9a62b29177b3aa365ca2 # v1.2.0
     with:
       test-command: go test -race -coverprofile=coverage.out ./internal/...
       coverage-threshold: 75
@@ -35,7 +35,7 @@ jobs:
 
   image:
     needs: [checks, e2e]
-    uses: pflege-de-labs/github-workflows/.github/workflows/image-build.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    uses: pflege-de-labs/github-workflows/.github/workflows/image-build.yml@2cf5d3bd6cabe68176ae9a62b29177b3aa365ca2 # v1.2.0
     permissions:
       contents: read
       packages: write
@@ -45,7 +45,7 @@ jobs:
   secobserve:
     needs: image
     if: github.event_name != 'pull_request'
-    uses: pflege-de-labs/github-workflows/.github/workflows/secobserve-image.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    uses: pflege-de-labs/github-workflows/.github/workflows/secobserve-image.yml@2cf5d3bd6cabe68176ae9a62b29177b3aa365ca2 # v1.2.0
     permissions:
       contents: read
       packages: read

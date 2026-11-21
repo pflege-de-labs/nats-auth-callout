@@ -83,7 +83,7 @@ jobs:
     concurrency:
       group: chart-release
       cancel-in-progress: false
-    uses: pflege-de-labs/github-workflows/.github/workflows/helm-release.yml@d5b9ce5cc098cf3239e796f49d742a48140130c0 # v1.0.0
+    uses: pflege-de-labs/github-workflows/.github/workflows/helm-release.yml@2cf5d3bd6cabe68176ae9a62b29177b3aa365ca2 # v1.2.0
     permissions:
       # Releases and tags.
       contents: write
